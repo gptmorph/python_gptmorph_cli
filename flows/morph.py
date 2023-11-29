@@ -30,6 +30,7 @@ def filter_source_code_file_names(file_path):
             file_path.endswith('package.json') or
             file_path.endswith('requirements.txt') or
             file_path.endswith('.md') or
+            file_path.endswith('.dot') or
             file_path.endswith('.env') or
             file_path.endswith('.py') or
             file_path.endswith('.sol') or
@@ -251,7 +252,7 @@ Therefore, we are using the Web API for accessing Claude:
             file_name = action['text']
             action["context"].add("generate_file_name", file_name)
             text = f"mrph> Ok, I will create a file \"{file_name}\" when finished. What should be in this file?"
-            await self.build_menu_response_transition(text, ['Unit test', '*'])(action)
+            await self.build_menu_response_transition(text, ['Unit test', 'Statement flow', '*'])(action)
 
         return transition
 
@@ -355,6 +356,39 @@ Therefore, we are using the Web API for accessing Claude:
         return transition
 
     @staticmethod
+    def build_generate_statement_flow_prompt_input_transition(nested_transition):
+
+        async def transition(action):
+
+            prompt = action['text']
+
+            # The dialog
+            dialog = LLMDialog()
+            dialog += build_current_project_context()
+            message = f"Please, generate a logical statement flow graph in the Graphviz format for the \"{prompt}\" " \
+                      f"method."
+            dialog.assign("user", message)
+
+            response = MorphBot.augment_chat(dialog)
+            print(f"llm> {response}")
+
+            file_name = action["context"].get("generate_file_name")
+
+            # Parse code blocks
+            code_blocks = re.findall(r"```(.*?)\n(.*?)\n```", response, re.DOTALL)
+
+            # Save code blocks to a text file
+            for language, code_block in code_blocks:
+                with open(file_name, 'w', encoding='utf-8') as file:
+                    file.write(f"{code_block}\n")
+
+            text = f"mrph> Your \"{file_name}\" file was saved."
+            await action["context"].bot.send_message(chat_id=action["update"]["effective_chat"]["id"], text=text)
+            await nested_transition(action)
+
+        return transition
+
+    @staticmethod
     def build_generate_prompt_input_unit_test_choice_transition():
 
         async def transition(action):
@@ -363,6 +397,19 @@ Therefore, we are using the Web API for accessing Claude:
 
             text = f"mrph> Will generate the \"{file_name}\" unit test. Please, describe, what should " \
                    f"be checked in this test."
+            await action["context"].bot.send_message(chat_id=action["update"]["effective_chat"]["id"], text=text)
+
+        return transition
+
+    @staticmethod
+    def build_generate_prompt_input_statement_flow_choice_transition():
+
+        async def transition(action):
+
+            file_name = action["context"].get("generate_file_name")
+
+            text = f"mrph> Will generate the \"{file_name}\" statement flow Graphviz representation. Please, " \
+                   f"describe, which ClassName.MethodName needs to be analyzed."
             await action["context"].bot.send_message(chat_id=action["update"]["effective_chat"]["id"], text=text)
 
         return transition
@@ -545,10 +592,17 @@ Type "/help" for more.\n''',
                 on_transition=self.build_generate_prompt_input_unit_test_choice_transition()) \
             .edge(
                 "/generate_prompt_input",
+                "/generate_statement_flow_prompt_input",
+                "/statement_flow",
+                on_transition=self.build_generate_prompt_input_statement_flow_choice_transition()) \
+            .edge(
+                "/generate_prompt_input",
                 "/start",
                 None,
                 matcher=re.compile("^.*$"),
                 on_transition=self.build_generate_prompt_input_transition(main_menu_transition)) \
+            .edge("/generate_statement_flow_prompt_input", "/start", "/start", on_transition=main_menu_transition) \
+            .edge("/generate_statement_flow_prompt_input", "/start", "/exit", on_transition=self.build_exit_transition()) \
             .edge("/generate_unit_test_prompt_input", "/start", "/start", on_transition=main_menu_transition) \
             .edge("/generate_unit_test_prompt_input", "/start", "/exit", on_transition=self.build_exit_transition()) \
             .edge(
@@ -557,6 +611,12 @@ Type "/help" for more.\n''',
                 None,
                 matcher=re.compile("^.*$"),
                 on_transition=self.build_generate_unit_test_prompt_input_transition(main_menu_transition)) \
+            .edge(
+                "/generate_statement_flow_prompt_input",
+                "/start",
+                None,
+                matcher=re.compile("^.*$"),
+                on_transition=self.build_generate_statement_flow_prompt_input_transition(main_menu_transition)) \
             .edge("/start", "/patch_file_name_input", "/patch", on_transition=self.build_patch_transition()) \
             .edge("/patch_file_name_input", "/start", "/start", on_transition=main_menu_transition) \
             .edge("/patch_file_name_input", "/start", "/exit", on_transition=self.build_exit_transition()) \

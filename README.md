@@ -9,7 +9,7 @@ The GPT Morph CLI Bot is a command-line interface (CLI) bot powered by OpenAI's 
 ## GPT Morph Status
 ✅ `ChatGPT API` active.
 
-🔴 `Claude Unofficial API` temporarily disabled.
+✅ `Claude Unofficial API` active.
 
 ## Installing the GPT Morph CLI
 ```shell
@@ -127,3 +127,5 @@ This project is licensed under the LGPL License - see the [LICENSE](LICENSE) fil
 - This project uses **Anthropic Claude** for text generation.
 
 Enjoy using the GPT Morph CLI Bot!
+
+🔴
